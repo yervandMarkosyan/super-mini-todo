@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C Backend + Vue Composition API Todo App</title>
+    <script  src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4 antialiased">
+
+    <!-- Vue Core App Mount Point -->
+    <div id="app" class="w-full max-w-md bg-slate-800/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl p-6 transition-all duration-300" v-cloak>
+
+        <!-- Header Section with Reactive Counter -->
+        <header class="flex items-center justify-between mb-6">
+            <h1 class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                My Todo List
+            </h1>
+            <span v-if="!isLoading" class="text-xs font-semibold px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full">
+                {{ todos.filter(t => !t.completed).length }} Tasks Left
+            </span>
+        </header>
+
+        <!-- Task Input Submission Form -->
+        <form @submit.prevent="addTodo" class="flex gap-2 mb-6">
+            <input
+                v-model="newTodoTitle"
+                type="text"
+                placeholder="What needs to be done?"
+                class="flex-1 px-4 py-2.5 bg-slate-950/40 border border-slate-700/60 rounded-xl font-medium text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-all disabled:opacity-50"
+                :disabled="isSubmitting"
+            />
+            <button
+                type="submit"
+                class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-40 disabled:pointer-events-none"
+                :disabled="isSubmitting || !newTodoTitle.trim()"
+            >
+                Add
+            </button>
+        </form>
+
+        <!-- Dynamic Loader State -->
+        <div v-if="isLoading" class="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
+            <div class="animate-spin rounded-full h-5 w-5 border-2 border-indigo-500 border-t-transparent"></div>
+            <p class="text-xs font-medium tracking-wide">Syncing with C Service...</p>
+        </div>
+
+        <!-- Empty State View Handler -->
+        <div v-else-if="todos.length === 0" class="text-center py-12 border border-dashed border-slate-700/60 rounded-xl bg-slate-950/10">
+            <p class="text-2xl mb-1">🎯</p>
+            <p class="text-sm font-medium text-slate-400">All caught up! Pipeline clear.</p>
+        </div>
+
+        <!-- Reactive Data Render Loop List -->
+        <ul v-else class="space-y-2">
+            <li
+                v-for="todo in todos"
+                :key="todo.id"
+                class="flex items-center justify-between p-3.5 bg-slate-950/20 hover:bg-slate-950/40 border border-slate-700/30 hover:border-slate-700/70 rounded-xl transition-all group"
+            >
+                <div class="flex items-center gap-3 min-w-0">
+                    <!-- Client-Side Click Toggle Element Emulation -->
+                    <button
+                        @click="todo.completed = !todo.completed"
+                        type="button"
+                        class="w-5 h-5 flex items-center justify-center rounded-md border text-white transition-all cursor-pointer"
+                        :class="todo.completed ? 'bg-emerald-600 border-emerald-500' : 'border-slate-600 hover:border-indigo-500 bg-slate-900'"
+                    >
+                        <svg v-if="todo.completed" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </button>
+
+                    <span
+                        class="text-sm font-medium truncate select-none transition-all duration-200"
+                        :class="todo.completed ? 'line-through text-slate-500' : 'text-slate-300'"
+                    >
+                        {{ todo.title }}
+                    </span>
+                </div>
+                <!-- Action Controls Group -->
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-[10px] font-mono font-bold tracking-wider text-slate-600 bg-slate-900/60 border border-slate-800 px-2 py-0.5 rounded-md group-hover:text-slate-400 transition-colors">
+                        #{{ todo.id }}
+                    </span>
+
+                    <!-- Delete Button Container -->
+                    <button
+                        @click="deleteTodo(todo)"
+                        type="button"
+                        class="text-slate-500 hover:text-rose-400 opacity-20 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md hover:bg-rose-500/10 transition-all cursor-pointer disabled:opacity-40"
+                        title="Delete Task"
+                        :disabled="todo.isDeleting"
+                    >
+                        <!-- Renders a localized spinner if a network block is actively clearing -->
+                        <span v-if="todo.isDeleting" class="inline-block animate-spin text-xs">⏳</span>
+
+                        <!-- Trash Icon Vector Layout -->
+                        <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                </div>
+
+            </li>
+        </ul>
+    </div>
+
+    <!-- Script Application Logic Core Context Wrapper -->
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        const app = createApp({
+            setup() {
+                const todos = ref([]);
+                const newTodoTitle = ref('');
+                const isLoading = ref(true);
+                const isSubmitting = ref(false);
+
+                const fetchTodos = async () => {
+                    try {
+                        isLoading.value = true;
+                        const r = await fetch('/api/todos');
+                        const data = await r.json();
+                        todos.value = data.map(todo => ({
+                            ...todo,
+                            isUpdating: false,
+                            isEditing: false,
+                            editTitle: todo.title
+                        }));
+                    } catch (e) {
+                        console.error("Fetch failed:", e);
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                const addTodo = async () => {
+                    if (!newTodoTitle.value.trim()) return;
+                    try {
+                        isSubmitting.value = true;
+                        const r = await fetch('/todos', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: Date.now(), title: newTodoTitle.value.trim(), completed: false })
+                        });
+                        const res = await r.json();
+                        if (res.status === 'success') {
+                            newTodoTitle.value = '';
+                            await fetchTodos();
+                        }
+                    } catch (e) {
+                        console.error("Post failed:", e);
+                    } finally {
+                        isSubmitting.value = false;
+                    }
+                };
+                const deleteTodo = async (todo) => {
+                    // Escape early if a double-click race condition is triggered
+                    if (todo.isDeleting) return;
+
+                    try {
+                        todo.isDeleting = true;
+
+                        // Dispatch the DELETE action to the target route ID
+                        const r = await fetch(`/api/todos/${todo.id}`, {
+                            method: 'DELETE'
+                        });
+
+                        const res = await r.json();
+                        if (res.status === 'success') {
+                            // Locally splice the model list array out of view reactively
+                            todos.value = todos.value.filter(t => t.id !== todo.id);
+                        }
+                    } catch (e) {
+                        console.error("DELETE failed:", e);
+                    } finally {
+                        todo.isDeleting = false;
+                    }
+                };
+                onMounted(fetchTodos);
+                return { todos, newTodoTitle, isLoading, isSubmitting, addTodo, deleteTodo };
+            }
+        });
+
+        // Register custom focus directive
+        app.directive('focus', {
+            mounted(el) {
+                el.focus();
+            }
+        });
+
+        app.mount('#app');
+    </script>
+
+    <style>[v-cloak] { display: none; }</style>
+</body>
+</html>
+
