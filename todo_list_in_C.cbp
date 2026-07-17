@@ -34,6 +34,7 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="../role_based_app/filename.txt" />
 		<Unit filename="include/cJSON.h" />
 		<Unit filename="include/controller.h" />
 		<Unit filename="include/service.h" />
